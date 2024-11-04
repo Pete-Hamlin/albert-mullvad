@@ -1,3 +1,4 @@
+import json
 import re
 import subprocess
 from collections import namedtuple
@@ -6,7 +7,7 @@ from pathlib import Path
 from albert import *
 
 md_iid = "2.3"
-md_version = "2.2"
+md_version = "2.3"
 md_name = "Mullvad"
 md_description = "Manage mullvad VPN connections"
 md_license = "MIT"
@@ -25,12 +26,20 @@ class Plugin(PluginInstance, GlobalQueryHandler):
 
     def __init__(self):
         PluginInstance.__init__(self)
-        GlobalQueryHandler.__init__(self, id=self.id, name=self.name, description=self.description, defaultTrigger="mullvad ")
+        GlobalQueryHandler.__init__(
+            self,
+            id=self.id,
+            name=self.name,
+            description=self.description,
+            defaultTrigger="mullvad ",
+        )
 
         self.connection_regex = re.compile(r"[a-z]{2}-[a-z]*-[a-z]{2,4}-[\d]{2,3}")
 
     def getRelays(self):
-        relayStr = subprocess.check_output("mullvad relay list", shell=True, encoding="UTF-8")
+        relayStr = subprocess.check_output(
+            "mullvad relay list", shell=True, encoding="UTF-8"
+        )
         for relayStr in relayStr.splitlines():
             relay = relayStr.split()
             if relay and self.connection_regex.match(relay[0]):
@@ -38,23 +47,33 @@ class Plugin(PluginInstance, GlobalQueryHandler):
 
     def getIcon(self, status_string: str):
         match status_string:
-            case "Blocked":
+            case "connecting":
                 return self.blockedIcon
-            case "Disconnected":
+            case "disconnected":
                 return self.disconnectIcon
-            case "Connected":
+            case "connected":
                 return self.connectIcon
             case _:
                 return self.iconUrls
 
     def defaultItems(self):
-        statusStr = subprocess.check_output("mullvad status", shell=True, encoding="UTF-8").strip()
+        status = json.loads(
+            subprocess.check_output("mullvad status -j", shell=True, encoding="UTF-8")
+        )
+        print(status)
+        status_str = "{} - {}, {}, - {}: {}".format(
+            status["state"].capitalize(),
+            status["details"]["location"].get("city"),
+            status["details"]["location"].get("country"),
+            status["details"]["location"].get("ipv4"),
+            status["details"]["endpoint"].get("hostname"),
+        )
         return [
             StandardItem(
                 id="status",
                 text="Status",
-                subtext=statusStr,
-                iconUrls=self.getIcon(statusStr),
+                subtext=status_str,
+                iconUrls=self.getIcon(status["state"]),
                 actions=[
                     Action(
                         "reconnect",
@@ -141,12 +160,20 @@ class Plugin(PluginInstance, GlobalQueryHandler):
         if query.isValid:
             if query.string.strip():
                 relays = self.getRelays()
-                query.add([item for item in self.actions() if query.string.lower() in item.text.lower()])
+                query.add(
+                    [
+                        item
+                        for item in self.actions()
+                        if query.string.lower() in item.text.lower()
+                    ]
+                )
                 query.add(
                     [
                         self.buildItem(relay)
                         for relay in relays
-                        if all(q in relay[0].lower() for q in query.string.lower().split())
+                        if all(
+                            q in relay[0].lower() for q in query.string.lower().split()
+                        )
                     ]
                 )
             else:
@@ -155,7 +182,9 @@ class Plugin(PluginInstance, GlobalQueryHandler):
     def handleGlobalQuery(self, query):
         if query.string.strip():
             return [
-                RankItem(item=item, score=0) for item in self.actions() if query.string.lower() in item.text.lower()
+                RankItem(item=item, score=0)
+                for item in self.actions()
+                if query.string.lower() in item.text.lower()
             ]
         else:
             return []
