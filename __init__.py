@@ -66,7 +66,7 @@ class Plugin(PluginInstance, GlobalQueryHandler):
             status["details"]["location"].get("city"),
             status["details"]["location"].get("country"),
             status["details"]["location"].get("ipv4"),
-            status["details"]["endpoint"].get("hostname"),
+            status["details"]["location"].get("hostname"),
         )
         return [
             StandardItem(
